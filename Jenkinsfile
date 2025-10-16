@@ -29,10 +29,24 @@ pipeline {
             steps {
                 script {
                     echo "🧪 Running container test..."
-                    // This block handles container start, test, and cleanup automatically.
-                    docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}").withRun('-p 8081:80') { c ->
-                        bat 'timeout /t 10' // Wait for Nginx to start
-                        bat 'curl -f http://localhost:8081 || exit 1'
+
+                    // Start and test the container
+                    docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}").withRun('-p 8081:80 --name test_container') { c ->
+
+                        // Wait for container startup
+                        bat 'powershell Start-Sleep -Seconds 15'
+
+                        // Perform a simple HTTP GET request to verify Nginx is running
+                        def testResult = bat(
+                            script: 'powershell -Command "try { $r = Invoke-WebRequest -Uri http://localhost:8081 -UseBasicParsing; if ($r.StatusCode -ne 200) { exit 1 } } catch { exit 1 }"',
+                            returnStatus: true
+                        )
+
+                        if (testResult != 0) {
+                            error("❌ Container test failed! HTTP request did not return status 200.")
+                        } else {
+                            echo "✅ Container responded successfully."
+                        }
                     }
                 }
             }
@@ -65,16 +79,15 @@ pipeline {
 
     post {
         always {
-            script {
-                echo "🧹 Cleaning up Docker image..."
-                bat "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || exit 0"
-            }
+            echo "🧹 Cleaning up test container and image..."
+            bat 'docker rm -f test_container || exit 0'
+            bat "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || exit 0"
         }
         success {
             echo "✅ Pipeline completed successfully!"
         }
         failure {
-            echo "❌ Pipeline failed! Check logs."
+            echo "❌ Pipeline failed! Check logs above for details."
         }
     }
 }
