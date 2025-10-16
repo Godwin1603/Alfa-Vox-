@@ -18,7 +18,7 @@ pipeline {
         stage('Build') {
             steps {
                 echo "🚀 Building Docker image..."
-                bat "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                bat "docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% ."
             }
         }
 
@@ -26,14 +26,19 @@ pipeline {
             steps {
                 script {
                     echo "🧪 Running container test..."
-                    
-                    // Stop and remove any previous test container safely
-                    bat 'for /F "tokens=*" %i in (\'docker ps -q --filter "publish=8081"\') do docker stop %i & docker rm %i || exit 0'
+
+                    // Stop and remove any container on port 8081 safely
+                    bat """
+                    for /F "tokens=*" %%i in ('docker ps -q --filter "publish=8081"') do (
+                        docker stop %%i
+                        docker rm %%i
+                    )
+                    """
 
                     // Run a new test container
-                    bat "docker run -d -p 8081:80 --name test_container ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                    bat "docker run -d -p 8081:80 --name test_container %DOCKER_IMAGE%:%DOCKER_TAG%"
 
-                    // Wait 5 seconds for container to be ready
+                    // Wait a few seconds for container to start
                     bat 'powershell -Command "Start-Sleep -Seconds 5"'
 
                     // Test container response
@@ -48,33 +53,39 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 echo "📤 Pushing Docker image to Docker Hub..."
+                // Use Jenkins credentials instead of plain username/password if possible
                 bat "docker login -u YOUR_DOCKERHUB_USERNAME -p YOUR_DOCKERHUB_PASSWORD"
-                bat "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                bat "docker push %DOCKER_IMAGE%:%DOCKER_TAG%"
             }
         }
 
         stage('Deploy') {
             steps {
                 echo "🚀 Deploying application..."
-                // Stop and remove any running container
-                bat 'for /F "tokens=*" %i in (\'docker ps -q --filter "name=alfavox-portfolio"\') do docker stop %i & docker rm %i || exit 0'
+                // Stop any old container
+                bat """
+                for /F "tokens=*" %%i in ('docker ps -q --filter "name=alfavox-portfolio"') do (
+                    docker stop %%i
+                    docker rm %%i
+                )
+                """
                 
-                // Run new container
-                bat "docker run -d -p 80:80 --name alfavox-portfolio ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                // Start new container
+                bat "docker run -d -p 80:80 --name alfavox-portfolio %DOCKER_IMAGE%:%DOCKER_TAG%"
             }
         }
     }
 
     post {
         always {
-            echo "🧹 Cleaning up test containers..."
+            echo "🧹 Cleaning up test container..."
             bat "docker rm -f test_container || exit 0"
         }
         success {
             echo "✅ Pipeline completed successfully!"
         }
         failure {
-            echo "❌ Pipeline failed! Check logs for details."
+            echo "❌ Pipeline failed! Check logs."
         }
     }
 }
