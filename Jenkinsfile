@@ -30,14 +30,18 @@ pipeline {
                 script {
                     echo "🧪 Running container test..."
 
+                    // Stop any old containers using port 8081
+                    bat 'powershell -Command "docker ps -q --filter \\"publish=8081\\" | ForEach-Object { docker stop $_; docker rm $_ }"'
+
+                    // Run the container and test
                     docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}").withRun('-p 8081:80') { c ->
-                        // Wait for container to start properly
+                        // Wait for container to start
                         bat 'powershell -Command "Start-Sleep -Seconds 10"'
 
-                        // Optional: print running containers
+                        // Show running containers
                         bat "docker ps -a"
 
-                        // Retry test up to 3 times in case NGINX is still starting
+                        // Retry curl test in case container is still starting
                         retry(3) {
                             bat 'curl -f http://localhost:8081 || (echo Retry && exit 1)'
                         }
