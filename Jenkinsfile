@@ -2,9 +2,11 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = 'alfavox-portfolio'
+        DOCKER_IMAGE = 'godwin1605/alfavox-portfolio'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
         KUBE_CONFIG = credentials('kubeconfig')
+        DEPLOYMENT_NAME = 'alfavox-deployment'
+        CONTAINER_NAME = 'alfavox-container'
     }
 
     stages {
@@ -47,10 +49,12 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                script {
-                    sh 'kubectl apply -f k8s-deployment.yaml'
-                    sh 'kubectl set image deployment/alfavox-deployment alfavox-container=alfavox-portfolio:latest'
-                    sh 'kubectl rollout status deployment/alfavox-deployment'
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    script {
+                        sh 'kubectl apply -f k8s-deployment.yaml'
+                        sh "kubectl set image deployment/${DEPLOYMENT_NAME} ${CONTAINER_NAME}=${DOCKER_IMAGE}:latest"
+                        sh "kubectl rollout status deployment/${DEPLOYMENT_NAME}"
+                    }
                 }
             }
         }

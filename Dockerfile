@@ -2,7 +2,7 @@
 FROM nginx:alpine
 
 # Copy the static files to the Nginx html directory
-COPY backend/public/ /usr/share/nginx/html/
+COPY public/ /usr/share/nginx/html/
 
 # Copy custom Nginx configuration if needed (optional)
 # COPY nginx.conf /etc/nginx/nginx.conf
