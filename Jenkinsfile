@@ -19,7 +19,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("${DOCKрокиIMAGE}:${DOCKER_TAG}")
+                    ddocker.build("${DOCKER_IMAGE}:${DOCKER_TAG}") // Correct line
                 }
             }
         }
