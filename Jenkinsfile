@@ -2,13 +2,14 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = "godwin1605/alfavox-portfolio"
-        DOCKER_TAG   = "build-${BUILD_NUMBER}"
+        DOCKER_IMAGE = 'godwin1605/alfavox-portfolio'
+        DOCKER_TAG = "build-${env.BUILD_NUMBER}"
+        DEPLOYMENT_NAME = 'alfavox-deployment'
+        CONTAINER_NAME = 'alfavox-container'
     }
 
     stages {
-
-        stage('Checkout SCM') {
+        stage('Checkout') {
             steps {
                 echo "🔄 Checking out source code..."
                 checkout scm
@@ -18,64 +19,60 @@ pipeline {
         stage('Build') {
             steps {
                 echo "🚀 Building Docker image..."
-                bat "docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% ."
+                // Use the built-in Docker pipeline function for better integration
+                script {
+                    docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}")
+                }
             }
         }
 
         stage('Test') {
-    steps {
-        script {
-            echo "🧪 Running container test..."
-
-            // Stop and remove any previous test container safely
-            bat 'docker rm -f test_container || echo "No existing test container"'
-
-            // Run new test container
-            bat "docker run -d -p 8081:80 --name test_container %DOCKER_IMAGE%:%DOCKER_TAG%"
-
-            // Give container a few seconds to start
-            bat 'powershell -Command "Start-Sleep -Seconds 5"'
-
-            // Test container response (requires curl)
-            bat 'curl -f http://localhost:8081 || exit 1'
-
-            // Stop and remove test container
-            bat 'docker stop test_container & docker rm test_container || echo "Cleanup done"'
+            steps {
+                script {
+                    echo "🧪 Running container test..."
+                    // This block automatically starts, tests, and cleans up the container
+                    docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}").withRun('-p 8081:80') { c ->
+                        bat 'timeout /t 10' // Wait for Nginx to start
+                        bat 'curl -f http://localhost:8081 || exit 1'
+                    }
+                }
+            }
         }
-    }
-}
-
 
         stage('Push Docker Image') {
             steps {
                 echo "📤 Pushing Docker image to Docker Hub..."
-                // Use Jenkins credentials instead of plain username/password if possible
-                bat "docker login -u YOUR_DOCKERHUB_USERNAME -p YOUR_DOCKERHUB_PASSWORD"
-                bat "docker push %DOCKER_IMAGE%:%DOCKER_TAG%"
+                // SECURE: Uses Jenkins credentials instead of hardcoding passwords
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
+                        def img = docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}")
+                        img.push()
+                        img.push('latest')
+                    }
+                }
             }
         }
 
-        stage('Deploy') {
+        stage('Deploy to Kubernetes') {
             steps {
-                echo "🚀 Deploying application..."
-                // Stop any old container
-                bat """
-                for /F "tokens=*" %%i in ('docker ps -q --filter "name=alfavox-portfolio"') do (
-                    docker stop %%i
-                    docker rm %%i
-                )
-                """
-                
-                // Start new container
-                bat "docker run -d -p 80:80 --name alfavox-portfolio %DOCKER_IMAGE%:%DOCKER_TAG%"
+                echo "🚀 Deploying application to Kubernetes..."
+                // CORRECT: Deploys to Kubernetes using the secure kubeconfig credential
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    bat 'kubectl apply -f k8s-deployment.yaml'
+                    bat "kubectl set image deployment/${DEPLOYMENT_NAME} ${CONTAINER_NAME}=${DOCKER_IMAGE}:latest"
+                    bat "kubectl rollout status deployment/${DEPLOYMENT_NAME}"
+                }
             }
         }
     }
 
     post {
         always {
-            echo "🧹 Cleaning up test container..."
-            bat "docker rm -f test_container || exit 0"
+            // Cleanup the build-specific image from the Jenkins agent
+            script {
+                echo "🧹 Cleaning up Docker image..."
+                bat "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || exit 0"
+            }
         }
         success {
             echo "✅ Pipeline completed successfully!"
