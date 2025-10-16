@@ -30,27 +30,20 @@ pipeline {
                 script {
                     echo "🧪 Running container test..."
 
-                    // Run test container
+                    // Run container
                     bat """
                         docker run -d -p 8081:80 --name ${CONTAINER_NAME} ${IMAGE_NAME}:${BUILD_TAG}
-                        powershell Start-Sleep -Seconds 15
+                        powershell -Command "Start-Sleep -Seconds 15"
                     """
 
-                    // Check if container responds
-                    bat '''
-                        powershell -Command "
-                            try {
-                                $r = Invoke-WebRequest -Uri http://localhost:8081 -UseBasicParsing
-                                if ($r.StatusCode -ne 200) { exit 1 }
-                            } catch {
-                                exit 1
-                            }
-                        "
-                    '''
+                    // Properly run PowerShell test command (all in one line)
+                    bat """
+                        powershell -Command "try { \$r = Invoke-WebRequest -Uri 'http://localhost:8081' -UseBasicParsing; if (\$r.StatusCode -ne 200) { exit 1 } } catch { exit 1 }"
+                    """
 
                     echo "✅ Container responded successfully."
 
-                    // Stop and remove container cleanly
+                    // Stop and remove test container cleanly
                     bat "docker stop ${CONTAINER_NAME} || exit 0"
                     bat "docker rm ${CONTAINER_NAME} || exit 0"
                 }
