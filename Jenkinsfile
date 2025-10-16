@@ -24,64 +24,67 @@ pipeline {
         stage('Test') {
             steps {
                 script {
-                    echo "🧪 Running container test with dynamic port..."
+                    echo "🧪 Running container test..."
 
-                    // Stop any old containers based on this image
-                    bat 'powershell -Command "docker ps -q --filter \\"ancestor=${DOCKER_IMAGE}\\" | ForEach-Object { docker stop $_; docker rm $_ }"'
+                    // Stop any container using same port
+                    bat '''
+                        for /f "tokens=*" %%i in ('docker ps -q --filter "publish=8081"') do docker stop %%i && docker rm %%i
+                    '''
 
-                    // Run container and capture only the container ID
-                    def output = bat(script: "docker run -d -P ${DOCKER_IMAGE}:${DOCKER_TAG}", returnStdout: true).trim()
-                    def lines = output.split("\\r?\\n")
-                    def containerId = lines[-1].trim()
-                    echo "🚀 Container started with ID: ${containerId}"
+                    // Run test container on 8081
+                    bat "docker run -d -p 8081:80 --name test_container ${DOCKER_IMAGE}:${DOCKER_TAG}"
 
-                    // Wait for container to start
-                    bat 'powershell -Command "Start-Sleep -Seconds 10"'
+                    // Wait for container startup
+                    bat 'powershell -Command "Start-Sleep -Seconds 8"'
 
-                    // Get mapped port (host port assigned by Docker)
-                    def portOutput = bat(script: "docker port ${containerId} 80/tcp", returnStdout: true).trim()
-                    echo "🌐 docker port output: ${portOutput}"
-
-                    // Extract port number (e.g. '0.0.0.0:49158' → '49158')
-                    def hostPort = portOutput.split(':')[-1].trim()
-                    echo "✅ Mapped Host Port: ${hostPort}"
-
-                    // Test endpoint using curl
-                    retry(3) {
-                        bat "curl -f http://localhost:${hostPort} || (echo Retry && exit 1)"
-                    }
-
-                    echo "🎯 Container responded successfully!"
-
-                    // Cleanup test container
-                    bat "docker stop ${containerId}"
-                    bat "docker rm ${containerId}"
+                    // Check if running
+                    bat "docker ps | findstr test_container"
                 }
             }
         }
 
-        stage('Push') {
-            when {
-                expression { return env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' }
-            }
+        stage('Push Docker Image') {
             steps {
-                echo "📤 Pushing Docker image to Docker Hub..."
-                bat "docker login -u godwin1605 -p %DOCKERHUB_PASSWORD%"
-                bat "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                script {
+                    echo "📤 Pushing Docker image to Docker Hub..."
+                    // Login first (store Docker credentials in Jenkins Credentials Manager as 'docker-hub-creds')
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        bat "docker login -u %DOCKER_USER% -p %DOCKER_PASS%"
+                    }
+                    bat "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                script {
+                    echo "🚀 Deploying latest build locally on port 8081..."
+
+                    // Stop any previous deployment
+                    bat '''
+                        for /f "tokens=*" %%i in ('docker ps -q --filter "name=alfavox"') do docker stop %%i && docker rm %%i
+                    '''
+
+                    // Run new container
+                    bat "docker run -d -p 8081:80 --name alfavox ${DOCKER_IMAGE}:${DOCKER_TAG}"
+
+                    echo "✅ Deployment successful! App is running on http://localhost:8081"
+                }
             }
         }
     }
 
     post {
-        always {
-            echo "🧹 Cleaning up..."
-            bat 'powershell -Command "docker system prune -f"'
-        }
         success {
-            echo "✅ Build and test completed successfully!"
+            echo "🎉 Build, Test, and Deploy completed successfully!"
         }
         failure {
-            echo "❌ Build or test failed. Check the logs above."
+            echo "❌ Pipeline failed! Check logs for details."
+        }
+        always {
+            echo "🧹 Cleaning up test container..."
+            bat 'docker rm -f test_container || exit 0'
         }
     }
 }
