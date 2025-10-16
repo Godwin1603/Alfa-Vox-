@@ -42,7 +42,7 @@ pipeline {
                     bat 'powershell -Command "Start-Sleep -Seconds 5"'
 
                     // Test container response
-                    bat 'powershell -Command "try { $response = Invoke-WebRequest -Uri http://localhost:8081; if ($response.StatusCode -ne 200) { exit 1 } } catch { exit 1 }"'
+                    bat 'curl -f http://localhost:8081'
 
                     // Stop test container after test
                     bat "docker stop test_container & docker rm test_container || exit 0"
