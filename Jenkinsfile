@@ -26,33 +26,36 @@ pipeline {
                 script {
                     echo "🧪 Running container test with dynamic port..."
 
-                    // Stop any containers from previous builds
+                    // Stop any old containers based on this image
                     bat 'powershell -Command "docker ps -q --filter \\"ancestor=${DOCKER_IMAGE}\\" | ForEach-Object { docker stop $_; docker rm $_ }"'
 
-                    // Run container with random port assignment
-                    def container = bat(script: "docker run -d -P ${DOCKER_IMAGE}:${DOCKER_TAG}", returnStdout: true).trim()
-                    echo "🚀 Container started: ${container}"
+                    // Run container and capture only the container ID
+                    def output = bat(script: "docker run -d -P ${DOCKER_IMAGE}:${DOCKER_TAG}", returnStdout: true).trim()
+                    def lines = output.split("\\r?\\n")
+                    def containerId = lines[-1].trim()
+                    echo "🚀 Container started with ID: ${containerId}"
 
-                    // Wait for container to be ready
+                    // Wait for container to start
                     bat 'powershell -Command "Start-Sleep -Seconds 10"'
 
-                    // Get dynamically mapped port (host port)
-                    def containerPort = bat(script: "docker port ${container} 80/tcp", returnStdout: true).trim()
-                    echo "🌐 Mapped Port -> ${containerPort}"
+                    // Get mapped port (host port assigned by Docker)
+                    def portOutput = bat(script: "docker port ${containerId} 80/tcp", returnStdout: true).trim()
+                    echo "🌐 docker port output: ${portOutput}"
 
-                    // Extract just the port number
-                    def port = containerPort.split(':')[-1].trim()
+                    // Extract port number (e.g. '0.0.0.0:49158' → '49158')
+                    def hostPort = portOutput.split(':')[-1].trim()
+                    echo "✅ Mapped Host Port: ${hostPort}"
 
-                    // Test container endpoint
+                    // Test endpoint using curl
                     retry(3) {
-                        bat "curl -f http://localhost:${port} || (echo Retry && exit 1)"
+                        bat "curl -f http://localhost:${hostPort} || (echo Retry && exit 1)"
                     }
 
-                    echo "✅ Container responded successfully on port ${port}!"
+                    echo "🎯 Container responded successfully!"
 
-                    // Stop and remove container after test
-                    bat "docker stop ${container}"
-                    bat "docker rm ${container}"
+                    // Cleanup test container
+                    bat "docker stop ${containerId}"
+                    bat "docker rm ${containerId}"
                 }
             }
         }
