@@ -1,0 +1,22 @@
+---
+- name: Deploy Application to Kubernetes
+  hosts: localhost
+  tasks:
+    - name: Ensure kubectl is configured
+      command: kubectl cluster-info
+      register: cluster_info
+      failed_when: cluster_info.rc != 0
+
+    - name: Apply Kubernetes deployment
+      command: kubectl apply -f ../k8s-deployment.yaml
+
+    - name: Wait for deployment rollout
+      command: kubectl rollout status deployment/alfavox-deployment
+
+    - name: Get service information
+      command: kubectl get svc alfavox-service
+      register: svc_info
+
+    - name: Display service info
+      debug:
+        msg: "{{ svc_info.stdout }}"

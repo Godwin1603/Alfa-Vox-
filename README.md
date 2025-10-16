@@ -9,6 +9,7 @@ This repository contains the DevOps setup for the AlfaVox portfolio website.
 - `Jenkinsfile`: CI/CD pipeline configuration
 - `k8s-deployment.yaml`: Kubernetes deployment manifests
 - `terraform/`: Infrastructure as Code using Terraform
+- `ansible/`: Ansible playbooks for automation tasks
 
 ## DevOps Workflow
 
