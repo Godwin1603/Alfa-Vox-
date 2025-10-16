@@ -23,32 +23,28 @@ pipeline {
         }
 
         stage('Test') {
-            steps {
-                script {
-                    echo "🧪 Running container test..."
+    steps {
+        script {
+            echo "🧪 Running container test..."
 
-                    // Stop and remove any container on port 8081 safely
-                    bat """
-                    for /F "tokens=*" %%i in ('docker ps -q --filter "publish=8081"') do (
-                        docker stop %%i
-                        docker rm %%i
-                    )
-                    """
+            // Stop and remove any previous test container safely
+            bat 'docker rm -f test_container || echo "No existing test container"'
 
-                    // Run a new test container
-                    bat "docker run -d -p 8081:80 --name test_container %DOCKER_IMAGE%:%DOCKER_TAG%"
+            // Run new test container
+            bat "docker run -d -p 8081:80 --name test_container %DOCKER_IMAGE%:%DOCKER_TAG%"
 
-                    // Wait a few seconds for container to start
-                    bat 'powershell -Command "Start-Sleep -Seconds 5"'
+            // Give container a few seconds to start
+            bat 'powershell -Command "Start-Sleep -Seconds 5"'
 
-                    // Test container response
-                    bat 'curl -f http://localhost:8081'
+            // Test container response (requires curl)
+            bat 'curl -f http://localhost:8081 || exit 1'
 
-                    // Stop test container after test
-                    bat "docker stop test_container & docker rm test_container || exit 0"
-                }
-            }
+            // Stop and remove test container
+            bat 'docker stop test_container & docker rm test_container || echo "Cleanup done"'
         }
+    }
+}
+
 
         stage('Push Docker Image') {
             steps {
