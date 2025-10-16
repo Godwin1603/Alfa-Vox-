@@ -7,8 +7,10 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout SCM') {
             steps {
+                echo "🔄 Checking out source code..."
                 checkout scm
             }
         }
@@ -24,56 +26,53 @@ pipeline {
             steps {
                 script {
                     echo "🧪 Running container test..."
+                    
+                    // Stop and remove any previous test container safely
+                    bat 'for /F "tokens=*" %i in (\'docker ps -q --filter "publish=8081"\') do docker stop %i & docker rm %i || exit 0'
 
-                    // Stop any container on port 8081
-                    bat 'for /F "tokens=*" %i in (\'docker ps -q --filter "publish=8081"\') do docker stop %i && docker rm %i || exit 0'
-
-                    // Run test container
+                    // Run a new test container
                     bat "docker run -d -p 8081:80 --name test_container ${DOCKER_IMAGE}:${DOCKER_TAG}"
 
-                    // Wait for container to start
-                    bat 'powershell -Command "Start-Sleep -Seconds 10"'
+                    // Wait 5 seconds for container to be ready
+                    bat 'powershell -Command "Start-Sleep -Seconds 5"'
 
-                    // Check if container responds
+                    // Test container response
                     bat 'curl -f http://localhost:8081 || exit 1'
+
+                    // Stop test container after test
+                    bat "docker stop test_container & docker rm test_container || exit 0"
                 }
             }
         }
 
         stage('Push Docker Image') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
             steps {
-                echo "📦 Pushing Docker image..."
+                echo "📤 Pushing Docker image to Docker Hub..."
+                bat "docker login -u YOUR_DOCKERHUB_USERNAME -p YOUR_DOCKERHUB_PASSWORD"
                 bat "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
             }
         }
 
         stage('Deploy') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
             steps {
                 echo "🚀 Deploying application..."
-                // Example deploy command (replace with your real deploy)
-                bat "docker stop alfavox || exit 0"
-                bat "docker rm alfavox || exit 0"
-                bat "docker run -d -p 80:80 --name alfavox ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                // Stop and remove any running container
+                bat 'for /F "tokens=*" %i in (\'docker ps -q --filter "name=alfavox-portfolio"\') do docker stop %i & docker rm %i || exit 0'
+                
+                // Run new container
+                bat "docker run -d -p 80:80 --name alfavox-portfolio ${DOCKER_IMAGE}:${DOCKER_TAG}"
             }
         }
     }
 
     post {
         always {
-            echo "🧹 Cleaning up test container..."
-            bat 'docker rm -f test_container || exit 0'
+            echo "🧹 Cleaning up test containers..."
+            bat "docker rm -f test_container || exit 0"
         }
-
         success {
-            echo "✅ Build, test, and deployment completed successfully!"
+            echo "✅ Pipeline completed successfully!"
         }
-
         failure {
             echo "❌ Pipeline failed! Check logs for details."
         }
