@@ -2,7 +2,6 @@ pipeline {
     agent any
 
     environment {
-        // CORRECTED: Your Docker Hub username is prefixed to the image name.
         DOCKER_IMAGE = 'godwin1605/alfavox-portfolio'
         DOCKER_TAG = "build-${env.BUILD_NUMBER}"
         DEPLOYMENT_NAME = 'alfavox-deployment'
@@ -19,7 +18,8 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    ddocker.build("${DOCKER_IMAGE}:${DOCKER_TAG}") // Correct line
+                    // CORRECTED: 'ddocker' changed to 'docker'
+                    docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}")
                 }
             }
         }
@@ -27,10 +27,10 @@ pipeline {
         stage('Test') {
             steps {
                 script {
-                    // Basic test: Check if container starts and responds.
                     docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}").withRun('-p 8080:80') { c ->
-                        sh 'sleep 10'
-                        sh 'curl -f http://localhost:8080 || exit 1'
+                        // CORRECTED: 'sh' changed to 'bat' for Windows
+                        bat 'timeout /t 10'
+                        bat 'curl -f http://localhost:8080 || exit 1'
                     }
                 }
             }
@@ -50,13 +50,13 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                // CORRECTED: The kubectl commands are wrapped to securely use your kubeconfig credential.
                 withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
                     script {
                         echo "Deploying to Kubernetes..."
-                        sh 'kubectl apply -f k8s-deployment.yaml'
-                        sh "kubectl set image deployment/${DEPLOYMENT_NAME} ${CONTAINER_NAME}=${DOCKER_IMAGE}:latest"
-                        sh "kubectl rollout status deployment/${DEPLOYMENT_NAME}"
+                        // CORRECTED: 'sh' changed to 'bat' for Windows
+                        bat 'kubectl apply -f k8s-deployment.yaml'
+                        bat "kubectl set image deployment/${DEPLOYMENT_NAME} ${CONTAINER_NAME}=${DOCKER_IMAGE}:latest"
+                        bat "kubectl rollout status deployment/${DEPLOYMENT_NAME}"
                     }
                 }
             }
@@ -65,10 +65,10 @@ pipeline {
 
     post {
         always {
-            // CORRECTED: The cleanup command is wrapped in a script block to avoid context errors.
             script {
-                echo "Cleaning up Docker image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                sh "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || true"
+                echo "Cleaning up Docker image..."
+                // CORRECTED: 'sh' changed to 'bat' for Windows
+                bat "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || exit 0"
             }
         }
         success {
