@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
+        // CORRECTED: Your Docker Hub username is prefixed to the image name.
         DOCKER_IMAGE = 'godwin1605/alfavox-portfolio'
-        DOCKER_TAG = "${env.BUILD_NUMBER}"
-        KUBE_CONFIG = credentials('kubeconfig')
+        DOCKER_TAG = "build-${env.BUILD_NUMBER}"
         DEPLOYMENT_NAME = 'alfavox-deployment'
         CONTAINER_NAME = 'alfavox-container'
     }
@@ -19,7 +19,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}")
+                    docker.build("${DOCKрокиIMAGE}:${DOCKER_TAG}")
                 }
             }
         }
@@ -27,7 +27,7 @@ pipeline {
         stage('Test') {
             steps {
                 script {
-                    // Basic test: Check if container starts
+                    // Basic test: Check if container starts and responds.
                     docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}").withRun('-p 8080:80') { c ->
                         sh 'sleep 10'
                         sh 'curl -f http://localhost:8080 || exit 1'
@@ -40,8 +40,9 @@ pipeline {
             steps {
                 script {
                     docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
-                        docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}").push()
-                        docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}").push('latest')
+                        def img = docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}")
+                        img.push()
+                        img.push('latest')
                     }
                 }
             }
@@ -49,8 +50,10 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
+                // CORRECTED: The kubectl commands are wrapped to securely use your kubeconfig credential.
                 withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
                     script {
+                        echo "Deploying to Kubernetes..."
                         sh 'kubectl apply -f k8s-deployment.yaml'
                         sh "kubectl set image deployment/${DEPLOYMENT_NAME} ${CONTAINER_NAME}=${DOCKER_IMAGE}:latest"
                         sh "kubectl rollout status deployment/${DEPLOYMENT_NAME}"
@@ -60,12 +63,19 @@ pipeline {
         }
     }
 
- post {
-    always {
-        script {
-            echo "Cleaning up Docker image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
-            sh "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || true"
+    post {
+        always {
+            // CORRECTED: The cleanup command is wrapped in a script block to avoid context errors.
+            script {
+                echo "Cleaning up Docker image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                sh "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || true"
+            }
+        }
+        success {
+            echo 'Pipeline succeeded! 🎉'
+        }
+        failure {
+            echo 'Pipeline failed! 😔'
         }
     }
-    // ... success and failure blocks
 }
