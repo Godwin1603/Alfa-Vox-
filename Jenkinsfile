@@ -60,15 +60,12 @@ pipeline {
         }
     }
 
-    post {
-        always {
-            sh 'docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || true'
-        }
-        success {
-            echo 'Pipeline succeeded!'
-        }
-        failure {
-            echo 'Pipeline failed!'
+ post {
+    always {
+        script {
+            echo "Cleaning up Docker image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
+            sh "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || true"
         }
     }
+    // ... success and failure blocks
 }
