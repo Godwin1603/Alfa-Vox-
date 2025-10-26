@@ -1,0 +1,69 @@
+---
+- name: Deploy and Manage AIFA Application on GKE
+  hosts: localhost
+  connection: local
+  vars:
+    project_id: "alfa-vox-portfolio"
+    cluster_name: "alfavox-cluster"
+    zone: "us-central1-a"
+    image_name: "godwin1605/aifa-backend:latest"
+    
+  tasks:
+    - name: Ensure GCP authentication
+      shell: |
+        gcloud auth activate-service-account --key-file={{ service_account_key }}
+      args:
+        executable: /bin/bash
+
+    - name: Configure kubectl for GKE cluster
+      shell: |
+        gcloud container clusters get-credentials {{ cluster_name }} --zone {{ zone }} --project {{ project_id }}
+      args:
+        executable: /bin/bash
+
+    - name: Create Kubernetes namespace for environment
+      shell: |
+        kubectl create namespace {{ environment }} --dry-run=client -o yaml | kubectl apply -f -
+      args:
+        executable: /bin/bash
+      environment:
+        environment: "{{ deploy_environment | default('production') }}"
+
+    - name: Deploy application configuration
+      shell: |
+        kubectl apply -f ../k8s-deployment.yaml -n {{ environment }}
+      args:
+        executable: /bin/bash
+      environment:
+        environment: "{{ deploy_environment | default('production') }}"
+
+    - name: Wait for deployment to be ready
+      shell: |
+        kubectl rollout status deployment/aifa-backend -n {{ environment }} --timeout=300s
+      args:
+        executable: /bin/bash
+      environment:
+        environment: "{{ deploy_environment | default('production') }}"
+
+    - name: Get application external IP
+      shell: |
+        kubectl get service aifa-backend-service -n {{ environment }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+      register: service_ip
+      args:
+        executable: /bin/bash
+      environment:
+        environment: "{{ deploy_environment | default('production') }}"
+
+    - name: Perform health check
+      shell: |
+        curl -f http://{{ service_ip.stdout }} || exit 1
+      args:
+        executable: /bin/bash
+
+    - name: Display deployment information
+      debug:
+        msg: |
+          ✅ Application deployed successfully!
+          🌐 Access URL: http://{{ service_ip.stdout }}
+          🏷️ Environment: {{ deploy_environment | default('production') }}
+          📦 Image: {{ image_name }}

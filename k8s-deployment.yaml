@@ -16,7 +16,7 @@ spec:
       - name: aifa-backend
         image: godwin1605/aifa-backend:latest
         ports:
-        - containerPort: 80  # ← CHANGE from 3000 to 80 (NGINX port)
+        - containerPort: 80
         resources:
           requests:
             memory: "512Mi"
@@ -32,4 +32,45 @@ spec:
     app: aifa-backend
   ports:
   - port: 80
-    targetPort: 80  # ← CHANGE from 3000 to 80 (NGINX port)
+    targetPort: 80
+---
+# SSL Certificate for your domain
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: aifa-backend-cert
+spec:
+  domains:
+    - www.alfagroups.tech        # ← Replace with your actual domain
+    - www.alfagroups.tech    # ← Replace with your www domain
+---
+# Ingress with SSL
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aifa-backend-ingress
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    networking.gke.io/managed-certificates: aifa-backend-cert
+spec:
+  rules:
+  - host: www.alfagroups.tech        # ← Your domain
+    http:
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: aifa-backend-service
+            port:
+              number: 80
+  - host: www.alfagroups.tech    # ← Your www domain
+    http:
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: aifa-backend-service
+            port:
+              number: 80
