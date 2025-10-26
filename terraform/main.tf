@@ -1,73 +1,44 @@
+# terraform/main.tf - Let GKE auto-assign IPs
 terraform {
   required_version = ">= 1.0"
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 4.0"
+      version = "~> 4.85.0"
     }
   }
 }
 
 provider "google" {
-  project = var.gcp_project_id
-  region  = var.region
+  project = "alfa-vox-portfolio"
+  region  = "us-central1"
 }
 
-# GKE Cluster
-resource "google_container_cluster" "primary" {
-  name     = "${var.cluster_name}-cluster"
-  location = var.region
+# Ultra-minimal GKE cluster - let GKE handle IP allocation
+resource "google_container_cluster" "alfavox_cluster" {
+  name               = "alfavox-cluster"
+  location           = "us-central1-a"  # Single zone only
+  initial_node_count = 1                # Only 1 node
   
-  remove_default_node_pool = true
-  initial_node_count       = 1
+  # Use default network
+  network    = "default"
+  subnetwork = "default"
 
-  network    = google_compute_network.vpc.name
-  subnetwork = google_compute_subnetwork.subnet.name
+  # Use default node pool
+  remove_default_node_pool = false
 
-  ip_allocation_policy {
-    cluster_ipv4_cidr_block  = "10.0.0.0/16"
-    services_ipv4_cidr_block = "10.1.0.0/16"
-  }
-}
+  # Remove ip_allocation_policy entirely - let GKE auto-assign
+  # This will use the minimum required IPs automatically
 
-resource "google_container_node_pool" "primary_nodes" {
-  name       = "${google_container_cluster.primary.name}-node-pool"
-  location   = var.region
-  cluster    = google_container_cluster.primary.name
-  
-  node_count = var.node_count
-
+  # Simple node config
   node_config {
-    preemptible  = true
-    machine_type = var.machine_type
-    disk_size_gb = var.disk_size
-
+    machine_type = "e2-micro"
+    disk_size_gb = 20
+    
     oauth_scopes = [
-      "https://www.googleapis.com/auth/cloud-platform"
+      "https://www.googleapis.com/auth/devstorage.read_only",
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring"
     ]
-  }
-}
-
-# VPC Network
-resource "google_compute_network" "vpc" {
-  name                    = "${var.cluster_name}-vpc"
-  auto_create_subnetworks = false
-}
-
-resource "google_compute_subnetwork" "subnet" {
-  name          = "${var.cluster_name}-subnet"
-  region        = var.region
-  network       = google_compute_network.vpc.name
-  ip_cidr_range = "10.2.0.0/16"
-}
-
-# Cloud Storage for Terraform state
-resource "google_storage_bucket" "tf_state" {
-  name          = "${var.gcp_project_id}-tf-state"
-  location      = var.region
-  force_destroy = false
-
-  versioning {
-    enabled = true
   }
 }

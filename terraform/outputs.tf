@@ -1,19 +1,14 @@
-output "vpc_id" {
-  description = "VPC ID"
-  value       = aws_vpc.alfavox_vpc.id
+output "gke_cluster_name" {
+  description = "GKE Cluster Name"
+  value       = google_container_cluster.alfavox_cluster.name  # Matches resource name in main.tf
 }
 
-output "subnet_id" {
-  description = "Subnet ID"
-  value       = aws_subnet.alfavox_subnet.id
+output "gke_cluster_endpoint" {
+  description = "GKE Cluster Endpoint"
+  value       = google_container_cluster.alfavox_cluster.endpoint
 }
 
-output "eks_cluster_name" {
-  description = "EKS cluster name"
-  value       = aws_eks_cluster.alfavox_cluster.name
-}
-
-output "eks_cluster_endpoint" {
-  description = "EKS cluster endpoint"
-  value       = aws_eks_cluster.alfavox_cluster.endpoint
+output "gke_cluster_region" {
+  description = "GKE Cluster Region"
+  value       = google_container_cluster.alfavox_cluster.location
 }

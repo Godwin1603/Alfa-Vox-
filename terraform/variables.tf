@@ -1,6 +1,7 @@
 variable "gcp_project_id" {
   description = "GCP Project ID"
   type        = string
+  default     = "alfa-vox-portfolio"  # Set your default project ID
 }
 
 variable "region" {
@@ -12,23 +13,5 @@ variable "region" {
 variable "cluster_name" {
   description = "GKE cluster name"
   type        = string
-  default     = "aifa"
-}
-
-variable "node_count" {
-  description = "Number of GKE nodes"
-  type        = number
-  default     = 2
-}
-
-variable "machine_type" {
-  description = "Machine type for GKE nodes"
-  type        = string
-  default     = "e2-medium"
-}
-
-variable "disk_size" {
-  description = "Disk size for GKE nodes (GB)"
-  type        = number
-  default     = 20
+  default     = "alfavox-cluster"
 }
