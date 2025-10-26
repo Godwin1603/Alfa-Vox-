@@ -7,14 +7,31 @@ on:
     branches: [ main ]
 
 env:
-  DOCKER_REGISTRY: docker.io  # or your preferred registry
-  IMAGE_NAME: your-dockerhub-username/aifa-backend
-  GKE_CLUSTER: aifa-cluster
-  GKE_ZONE: us-central1
+  DOCKER_REGISTRY: docker.io
+  IMAGE_NAME: godwin1605/aifa-backend
+  GKE_CLUSTER: alfavox-cluster  # Updated to match your actual cluster name
+  GKE_ZONE: us-central1-a       # Updated to match your actual zone
 
 jobs:
-  build-and-push:
+  security-scan:
+    name: Security Scan
     runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Run security scan on Dockerfile
+      run: |
+        docker run --rm -v "$PWD:/app" aquasec/trivy:latest config /app
+        
+    - name: Check for secrets in code
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: security-scan
     steps:
     - uses: actions/checkout@v3
     
@@ -27,7 +44,12 @@ jobs:
     - name: Build Docker image
       run: |
         docker build -t $IMAGE_NAME:$GITHUB_SHA .
-        docker tag $IMAGE_NAME:$GITHUB_SHA $IMAGE_NAME:latest
+        docker build -t $IMAGE_NAME:latest .
+        
+    - name: Scan Docker image for vulnerabilities
+      run: |
+        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+          aquasec/trivy:latest image $IMAGE_NAME:$GITHUB_SHA
         
     - name: Push Docker image
       run: |
@@ -35,8 +57,10 @@ jobs:
         docker push $IMAGE_NAME:latest
 
   deploy:
-    needs: build-and-push
+    name: Deploy to GKE
     runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'  # Only deploy on main branch
     steps:
     - uses: actions/checkout@v3
     
@@ -58,3 +82,36 @@ jobs:
       run: |
         kubectl set image deployment/aifa-backend aifa-backend=$IMAGE_NAME:$GITHUB_SHA
         kubectl rollout status deployment/aifa-backend
+        
+    - name: Verify deployment
+      run: |
+        kubectl get deployments
+        kubectl get pods
+        kubectl get services
+
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+    - name: Setup GCP Auth
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        
+    - name: Setup Gcloud
+      uses: google-github-actions/setup-gcloud@v1
+        
+    - name: Get GKE credentials
+      uses: google-github-actions/get-gke-credentials@v1
+      with:
+        cluster_name: ${{ env.GKE_CLUSTER }}
+        location: ${{ env.GKE_ZONE }}
+        
+    - name: Run smoke test
+      run: |
+        # Wait for service to get external IP
+        sleep 60
+        EXTERNAL_IP=$(kubectl get service aifa-backend-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        echo "Testing application at: http://$EXTERNAL_IP"
+        curl -f http://$EXTERNAL_IP || exit 1
