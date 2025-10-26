@@ -2,10 +2,10 @@ pipeline {
     agent any
     
     environment {
-        GCP_PROJECT = 'your-project-id'
+        DOCKER_REGISTRY = 'docker.io'
+        IMAGE_NAME = 'your-dockerhub-username/aifa-backend'
         GKE_CLUSTER = 'aifa-cluster'
         GKE_ZONE = 'us-central1'
-        IMAGE = "gcr.io/${GCP_PROJECT}/aifa-backend"
     }
     
     stages {
@@ -19,7 +19,7 @@ pipeline {
         stage('Build') {
             steps {
                 script {
-                    docker.build("${IMAGE}:${env.BUILD_ID}")
+                    docker.build("${IMAGE_NAME}:${env.BUILD_ID}")
                 }
             }
         }
@@ -27,8 +27,9 @@ pipeline {
         stage('Push') {
             steps {
                 script {
-                    docker.withRegistry('https://gcr.io', 'gcp-auth') {
-                        docker.image("${IMAGE}:${env.BUILD_ID}").push()
+                    docker.withRegistry("https://${DOCKER_REGISTRY}", 'dockerhub-credentials') {
+                        docker.image("${IMAGE_NAME}:${env.BUILD_ID}").push()
+                        docker.image("${IMAGE_NAME}:latest").push()
                     }
                 }
             }
@@ -49,7 +50,7 @@ pipeline {
                     withCredentials([file(credentialsId: 'gcp-key', variable: 'GCP_KEY')]) {
                         sh "gcloud auth activate-service-account --key-file=${GCP_KEY}"
                         sh "gcloud container clusters get-credentials ${GKE_CLUSTER} --zone ${GKE_ZONE} --project ${GCP_PROJECT}"
-                        sh "kubectl set image deployment/aifa-backend aifa-backend=${IMAGE}:${env.BUILD_ID}"
+                        sh "kubectl set image deployment/aifa-backend aifa-backend=${IMAGE_NAME}:${env.BUILD_ID}"
                         sh "kubectl rollout status deployment/aifa-backend"
                     }
                 }

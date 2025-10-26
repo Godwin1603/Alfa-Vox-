@@ -7,10 +7,10 @@ on:
     branches: [ main ]
 
 env:
-  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  DOCKER_REGISTRY: docker.io  # or your preferred registry
+  IMAGE_NAME: your-dockerhub-username/aifa-backend
   GKE_CLUSTER: aifa-cluster
   GKE_ZONE: us-central1
-  IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID }}/aifa-backend
 
 jobs:
   test:
@@ -36,22 +36,21 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    - name: Setup GCP Auth
-      uses: google-github-actions/auth@v1
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
       with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-        
-    - name: Setup Gcloud
-      uses: google-github-actions/setup-gcloud@v1
-        
-    - name: Configure Docker for GCR
-      run: gcloud auth configure-docker gcr.io
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
         
     - name: Build Docker image
-      run: docker build -t $IMAGE:$GITHUB_SHA .
+      run: |
+        docker build -t $IMAGE_NAME:$GITHUB_SHA .
+        docker build -t $IMAGE_NAME:latest .
         
     - name: Push Docker image
-      run: docker push $IMAGE:$GITHUB_SHA
+      run: |
+        docker push $IMAGE_NAME:$GITHUB_SHA
+        docker push $IMAGE_NAME:latest
 
   deploy:
     needs: build-and-push
@@ -75,12 +74,5 @@ jobs:
         
     - name: Deploy to GKE
       run: |
-        kubectl set image deployment/aifa-backend aifa-backend=$IMAGE:$GITHUB_SHA
+        kubectl set image deployment/aifa-backend aifa-backend=$IMAGE_NAME:$GITHUB_SHA
         kubectl rollout status deployment/aifa-backend
-        
-    - name: Run Ansible deployment
-      run: |
-        cd ansible
-        ansible-playbook playbook-deploy-app.yml \
-          -e "gcp_project_id=${{ secrets.GCP_PROJECT_ID }}" \
-          -e "service_account_key=${{ secrets.GCP_SA_KEY }}"
