@@ -1,4 +1,3 @@
-# terraform/main.tf - Let GKE auto-assign IPs
 terraform {
   required_version = ">= 1.0"
   required_providers {
@@ -14,11 +13,11 @@ provider "google" {
   region  = "us-central1"
 }
 
-# Ultra-minimal GKE cluster - let GKE handle IP allocation
+# GKE Cluster with e2-standard-4 nodes
 resource "google_container_cluster" "alfavox_cluster" {
   name               = "alfavox-cluster"
-  location           = "us-central1-a"  # Single zone only
-  initial_node_count = 1                # Only 1 node
+  location           = "us-central1-a"  # Single zone for cost efficiency
+  initial_node_count = 1                # Start with 1 node
   
   # Use default network
   network    = "default"
@@ -27,18 +26,68 @@ resource "google_container_cluster" "alfavox_cluster" {
   # Use default node pool
   remove_default_node_pool = false
 
-  # Remove ip_allocation_policy entirely - let GKE auto-assign
-  # This will use the minimum required IPs automatically
+  # Disable unnecessary features to save resources
+  enable_shielded_nodes = false
+  enable_intranode_visibility = false
+  enable_kubernetes_alpha = false
+  
+  # Let GKE auto-assign IP ranges
+  # Remove ip_allocation_policy to use defaults
 
-  # Simple node config
+  # Node configuration with e2-standard-4
   node_config {
-    machine_type = "e2-micro"
-    disk_size_gb = 20
+    machine_type = "e2-standard-4"  # 4 vCPUs, 16GB RAM
+    disk_size_gb = 50               # Larger disk for stability
+    preemptible  = false            # More stable for production
     
+    # Essential scopes
     oauth_scopes = [
-      "https://www.googleapis.com/auth/devstorage.read_only",
-      "https://www.googleapis.com/auth/logging.write",
-      "https://www.googleapis.com/auth/monitoring"
+      "https://www.googleapis.com/auth/cloud-platform"
     ]
+
+    # Labels for better resource management
+    labels = {
+      environment = "production"
+      workload    = "backend"
+    }
+
+    # Taints/tolerations if needed
+    taint = []
   }
+
+  # Cluster autoscaling for better resource management
+  cluster_autoscaling {
+    enabled = true
+    resource_limits {
+      resource_type = "cpu"
+      minimum = 1
+      maximum = 4
+    }
+    resource_limits {
+      resource_type = "memory"
+      minimum = 4
+      maximum = 16
+    }
+  }
+
+  # Vertical Pod Autoscaling (recommended)
+  vertical_pod_autoscaling {
+    enabled = true
+  }
+}
+
+# Outputs
+output "gke_cluster_name" {
+  description = "GKE Cluster Name"
+  value       = google_container_cluster.alfavox_cluster.name
+}
+
+output "gke_cluster_endpoint" {
+  description = "GKE Cluster Endpoint"
+  value       = google_container_cluster.alfavox_cluster.endpoint
+}
+
+output "gke_cluster_region" {
+  description = "GKE Cluster Region"
+  value       = google_container_cluster.alfavox_cluster.location
 }
