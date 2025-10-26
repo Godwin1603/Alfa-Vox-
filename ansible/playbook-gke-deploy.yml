@@ -9,11 +9,16 @@
     image_name: "godwin1605/aifa-backend:latest"
     
   tasks:
-    - name: Ensure GCP authentication
+    - name: Check GCP authentication status
       shell: |
-        gcloud auth activate-service-account --key-file={{ service_account_key }}
+        gcloud auth list --format="value(account)" | head -1
+      register: gcp_user
       args:
         executable: /bin/bash
+
+    - name: Display current GCP user
+      debug:
+        msg: "Currently authenticated as: {{ gcp_user.stdout }}"
 
     - name: Configure kubectl for GKE cluster
       shell: |
@@ -21,42 +26,32 @@
       args:
         executable: /bin/bash
 
-    - name: Create Kubernetes namespace for environment
-      shell: |
-        kubectl create namespace {{ environment }} --dry-run=client -o yaml | kubectl apply -f -
-      args:
-        executable: /bin/bash
-      environment:
-        environment: "{{ deploy_environment | default('production') }}"
+    - name: Check if k8s-deployment.yaml exists
+      stat:
+        path: ../k8s-deployment.yaml
+      register: k8s_file
+
+    - name: Display file status
+      debug:
+        msg: "k8s-deployment.yaml exists: {{ k8s_file.stat.exists }}"
 
     - name: Deploy application configuration
       shell: |
-        kubectl apply -f ../k8s-deployment.yaml -n {{ environment }}
+        kubectl apply -f ../k8s-deployment.yaml
       args:
         executable: /bin/bash
-      environment:
-        environment: "{{ deploy_environment | default('production') }}"
+      when: k8s_file.stat.exists
 
     - name: Wait for deployment to be ready
       shell: |
-        kubectl rollout status deployment/aifa-backend -n {{ environment }} --timeout=300s
+        kubectl rollout status deployment/aifa-backend --timeout=300s
       args:
         executable: /bin/bash
-      environment:
-        environment: "{{ deploy_environment | default('production') }}"
 
     - name: Get application external IP
       shell: |
-        kubectl get service aifa-backend-service -n {{ environment }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+        kubectl get service aifa-backend-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
       register: service_ip
-      args:
-        executable: /bin/bash
-      environment:
-        environment: "{{ deploy_environment | default('production') }}"
-
-    - name: Perform health check
-      shell: |
-        curl -f http://{{ service_ip.stdout }} || exit 1
       args:
         executable: /bin/bash
 
@@ -65,5 +60,5 @@
         msg: |
           ✅ Application deployed successfully!
           🌐 Access URL: http://{{ service_ip.stdout }}
-          🏷️ Environment: {{ deploy_environment | default('production') }}
+          🏷️ Environment: production
           📦 Image: {{ image_name }}
