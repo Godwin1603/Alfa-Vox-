@@ -1,29 +1,34 @@
+variable "gcp_project_id" {
+  description = "GCP Project ID"
+  type        = string
+}
+
 variable "region" {
-  description = "AWS region"
+  description = "GCP region"
   type        = string
-  default     = "us-east-1"
-}
-
-variable "vpc_cidr" {
-  description = "CIDR block for VPC"
-  type        = string
-  default     = "10.0.0.0/16"
-}
-
-variable "subnet_cidr" {
-  description = "CIDR block for subnet"
-  type        = string
-  default     = "10.0.1.0/24"
+  default     = "us-central1"
 }
 
 variable "cluster_name" {
-  description = "EKS cluster name"
+  description = "GKE cluster name"
   type        = string
-  default     = "alfavox-cluster"
+  default     = "aifa"
 }
 
-variable "node_group_name" {
-  description = "EKS node group name"
+variable "node_count" {
+  description = "Number of GKE nodes"
+  type        = number
+  default     = 2
+}
+
+variable "machine_type" {
+  description = "Machine type for GKE nodes"
   type        = string
-  default     = "alfavox-node-group"
+  default     = "e2-medium"
+}
+
+variable "disk_size" {
+  description = "Disk size for GKE nodes (GB)"
+  type        = number
+  default     = 20
 }
