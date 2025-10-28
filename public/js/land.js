@@ -657,7 +657,7 @@ const linkElement = document.getElementById('publicLink');
 
 if (linkContainer && linkElement) {
     const uid = user.uid;
-    const url = `https://alfagroups.me/port.html?uid=${uid}`;
+    const url = `https://alfagroups.tech/port.html?uid=${uid}`;
     linkElement.href = url;
     linkElement.textContent = url;
     linkContainer.classList.remove('hidden');
